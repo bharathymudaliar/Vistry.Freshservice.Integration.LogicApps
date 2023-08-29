@@ -1,0 +1,1297 @@
+{
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Catch-Scope": {
+                "actions": {
+                    "Email_the_Error": {
+                        "inputs": {
+                            "body": {
+                                "Body": "<p>Error occured : @{body('Filter_array')}</p>",
+                                "Importance": "Normal",
+                                "Subject": "Error In Crimsonportal Integration",
+                                "To": "@parameters('EmailAddress')"
+                            },
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['office365_1']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "path": "/v2/Mail"
+                        },
+                        "runAfter": {
+                            "Filter_array": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ApiConnection"
+                    },
+                    "Filter_array": {
+                        "inputs": {
+                            "from": "@result('Try-Scope')",
+                            "where": "@equals(item()?['status'], 'Failed')"
+                        },
+                        "runAfter": {},
+                        "type": "Query"
+                    }
+                },
+                "runAfter": {
+                    "Try-Scope": [
+                        "Failed",
+                        "TimedOut"
+                    ]
+                },
+                "type": "Scope"
+            },
+            "Initialize_Attachment": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Attachments",
+                            "type": "array"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Priority": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_AttachmentsToAdd": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "AttachmentsToAdd",
+                            "type": "array"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Attachment": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_CaseId": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "CaseId",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_AttachmentsToAdd": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Initialize_Payload": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Payload",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "runAfter": {},
+                "type": "InitializeVariable"
+            },
+            "Initialize_Priority": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Priority",
+                            "type": "integer"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Initialize_Payload": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Try-Scope": {
+                "actions": {
+                    "Check_If_ApiKey_is_Valid": {
+                        "actions": {},
+                        "else": {
+                            "actions": {
+                                "Compose_Invalid_ApiKey": {
+                                    "inputs": {
+                                        "Error": "Invalid Apikey  @{triggerOutputs()['headers']?['ApiKey']}"
+                                    },
+                                    "runAfter": {},
+                                    "type": "Compose"
+                                },
+                                "Email_Validation_Error": {
+                                    "inputs": {
+                                        "body": {
+                                            "Body": "<p>@{outputs('Compose_Invalid_ApiKey')}</p>",
+                                            "Importance": "Normal",
+                                            "Subject": "Crimsonportal Validation Error",
+                                            "To": "@parameters('EmailAddress')"
+                                        },
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['office365_1']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "path": "/v2/Mail"
+                                    },
+                                    "runAfter": {
+                                        "Response": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection"
+                                },
+                                "Response": {
+                                    "inputs": {
+                                        "body": "@json(string(outputs('Compose_Invalid_ApiKey')))",
+                                        "statusCode": 401
+                                    },
+                                    "kind": "Http",
+                                    "runAfter": {
+                                        "Compose_Invalid_ApiKey": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Response"
+                                },
+                                "Terminate": {
+                                    "inputs": {
+                                        "runError": {
+                                            "message": "@{json(string(outputs('Compose_Invalid_ApiKey')))}"
+                                        },
+                                        "runStatus": "Failed"
+                                    },
+                                    "runAfter": {
+                                        "Email_Validation_Error": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Terminate"
+                                }
+                            }
+                        },
+                        "expression": {
+                            "and": [
+                                {
+                                    "equals": [
+                                        "@triggerOutputs()?['headers']?['ApiKey']",
+                                        "@body('Get_ApiKey_Secret')?['value']"
+                                    ]
+                                }
+                            ]
+                        },
+                        "runAfter": {
+                            "Get_ApiKey_Secret": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "If"
+                    },
+                    "Check_If_Contact_Exists": {
+                        "actions": {
+                            "Check_If_New_Case": {
+                                "actions": {
+                                    "Create_Case": {
+                                        "inputs": {
+                                            "body": {
+                                                "casetypecode": 2,
+                                                "crimson_casecreationchannel": 143570001,
+                                                "crimson_categorylist": 143570004,
+                                                "crimson_customerreference": "@body('Parse_Payload')?['ExternalCaseRef']",
+                                                "crimson_supportedapplicationid@odata.bind": "@body('Get_Supported_Application_By_Id')?['@odata.id']",
+                                                "customerid_account@odata.bind": "@body('Get_Account_By_Id')?['@odata.id']",
+                                                "description": "@body('Parse_Payload')?['Description']",
+                                                "primarycontactid@odata.bind": "@body('Get_Contact_By_Id')?['@odata.id']",
+                                                "prioritycode": "@body('Parse_Payload')?['Priority']",
+                                                "title": "@body('Parse_Payload')?['Title']"
+                                            },
+                                            "headers": {
+                                                "organization": "https://crimsonportal.crm4.dynamics.com",
+                                                "prefer": "return=representation,odata.include-annotations=*"
+                                            },
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['commondataservice']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "path": "/api/data/v9.1/@{encodeURIComponent(encodeURIComponent('incidents'))}"
+                                        },
+                                        "runAfter": {},
+                                        "type": "ApiConnection"
+                                    },
+                                    "Set_CreateCaseId": {
+                                        "inputs": {
+                                            "name": "CaseId",
+                                            "value": "@body('Create_Case')?['incidentid']"
+                                        },
+                                        "runAfter": {
+                                            "Create_Case": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "SetVariable"
+                                    }
+                                },
+                                "else": {
+                                    "actions": {
+                                        "Set_UpdateCaseId": {
+                                            "inputs": {
+                                                "name": "CaseId",
+                                                "value": "@first(body('Get_Case_By_External_Case_Ref')?['value'])?['incidentid']"
+                                            },
+                                            "runAfter": {},
+                                            "type": "SetVariable"
+                                        }
+                                    }
+                                },
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "lessOrEquals": [
+                                                "@length(body('Get_Case_By_External_Case_Ref')?['value'])",
+                                                0
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "runAfter": {
+                                    "Get_Case_By_External_Case_Ref": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "If"
+                            },
+                            "Check_If_Ticket_Contains_Attachment": {
+                                "actions": {
+                                    "Check_Case_Attachment_Is_Not_Null": {
+                                        "actions": {
+                                            "Filter_Attachments": {
+                                                "inputs": {
+                                                    "from": "@body('Parse_Payload')?['Attachments']",
+                                                    "where": "@greater(formatDateTime(item()?['CreatedAt'], 'yyyy-MM-ddTHH:mm:ss'), formatDateTime(first(body('Get_Last_Added_Attachment')?['value'])?['createdon'], 'yyyy-MM-ddTHH:mm:ss'))"
+                                                },
+                                                "runAfter": {},
+                                                "type": "Query"
+                                            },
+                                            "Set_AttachmentToAdd": {
+                                                "inputs": {
+                                                    "name": "AttachmentsToAdd",
+                                                    "value": "@body('Filter_Attachments')"
+                                                },
+                                                "runAfter": {
+                                                    "Filter_Attachments": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "SetVariable"
+                                            }
+                                        },
+                                        "else": {
+                                            "actions": {
+                                                "Set_AttachmentsToAdd": {
+                                                    "inputs": {
+                                                        "name": "AttachmentsToAdd",
+                                                        "value": "@body('Parse_Payload')?['Attachments']"
+                                                    },
+                                                    "runAfter": {},
+                                                    "type": "SetVariable"
+                                                }
+                                            }
+                                        },
+                                        "expression": {
+                                            "and": [
+                                                {
+                                                    "greater": [
+                                                        "@length(body('Get_Last_Added_Attachment')?['value'])",
+                                                        0
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        "runAfter": {
+                                            "Get_Last_Added_Attachment": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "If"
+                                    },
+                                    "For_Each_Attachments": {
+                                        "actions": {
+                                            "Add_Attachment": {
+                                                "inputs": {
+                                                    "body": {
+                                                        "documentbody": "@{items('For_Each_Attachments')?['Content']}",
+                                                        "filename": "@{items('For_Each_Attachments')?['Name']}",
+                                                        "isdocument": true,
+                                                        "mimetype": "@{items('For_Each_Attachments')?['ContentType']}",
+                                                        "objectid_incident@odata.bind": "@body('Get_Case_By_Id')?['@odata.id']",
+                                                        "overriddencreatedon": "@{items('For_Each_Attachments')?['CreatedAt']}",
+                                                        "subject": "Note added by  @{body('Get_Case_By_Id')?['crimson_contactsfirstname']}"
+                                                    },
+                                                    "headers": {
+                                                        "organization": "https://crimsonportal.crm4.dynamics.com",
+                                                        "prefer": "return=representation,odata.include-annotations=*"
+                                                    },
+                                                    "host": {
+                                                        "connection": {
+                                                            "name": "@parameters('$connections')['commondataservice']['connectionId']"
+                                                        }
+                                                    },
+                                                    "method": "post",
+                                                    "path": "/api/data/v9.1/@{encodeURIComponent(encodeURIComponent('annotations'))}"
+                                                },
+                                                "runAfter": {},
+                                                "type": "ApiConnection"
+                                            }
+                                        },
+                                        "foreach": "@variables('AttachmentsToAdd')",
+                                        "runAfter": {
+                                            "Check_Case_Attachment_Is_Not_Null": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "runtimeConfiguration": {
+                                            "concurrency": {
+                                                "repetitions": 1
+                                            }
+                                        },
+                                        "type": "Foreach"
+                                    },
+                                    "Get_Last_Added_Attachment": {
+                                        "inputs": {
+                                            "headers": {
+                                                "accept": "application/json;odata.metadata=full",
+                                                "organization": "https://crimsonportal.crm4.dynamics.com",
+                                                "prefer": "odata.include-annotations=*"
+                                            },
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['commondataservice']['connectionId']"
+                                                }
+                                            },
+                                            "method": "get",
+                                            "path": "/api/data/v9.1/@{encodeURIComponent(encodeURIComponent('annotations'))}",
+                                            "queries": {
+                                                "fetchXml": "<fetch mapping=\"logical\"  count=\"1\">\n    <entity name=\"annotation\" >\n        <attribute name=\"annotationid\" />\n        <attribute name=\"objectid\" />\n        <attribute name=\"createdon\" />\n<order attribute=\"createdon\" descending=\"true\" />\n        <filter type=\"and\" >\n<condition attribute=\"documentbody\" operator=\"not-null\" />\n            <condition attribute=\"objectid\" operator=\"eq\" value=\"@{variables('CaseId')}\" />\n        </filter>\n        <link-entity name=\"incident\" to=\"objectid\" from=\"incidentid\" alias=\"cases\" >\n            <attribute name=\"incidentid\" />\n        </link-entity>\n    </entity>\n</fetch>"
+                                            }
+                                        },
+                                        "runAfter": {},
+                                        "type": "ApiConnection"
+                                    }
+                                },
+                                "expression": {
+                                    "and": [
+                                        {
+                                            "greater": [
+                                                "@length(body('Parse_Payload')?['Attachments'])",
+                                                0
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "runAfter": {
+                                    "Get_Case_By_Id": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "If"
+                            },
+                            "Get_Account_By_Id": {
+                                "inputs": {
+                                    "headers": {
+                                        "accept": "application/json;odata.metadata=full",
+                                        "organization": "https://crimsonportal.crm4.dynamics.com",
+                                        "prefer": "odata.include-annotations=*"
+                                    },
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['commondataservice']['connectionId']"
+                                        }
+                                    },
+                                    "method": "get",
+                                    "path": "/api/data/v9.1/@{encodeURIComponent(encodeURIComponent('accounts'))}(@{encodeURIComponent(encodeURIComponent(first(body('Get_Contact_By_Email')?['value'])?['_parentcustomerid_value']))})"
+                                },
+                                "runAfter": {
+                                    "Get_Contact_By_Id": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ApiConnection"
+                            },
+                            "Get_Case_By_External_Case_Ref": {
+                                "inputs": {
+                                    "headers": {
+                                        "accept": "application/json;odata.metadata=full",
+                                        "organization": "https://crimsonportal.crm4.dynamics.com",
+                                        "prefer": "odata.include-annotations=*"
+                                    },
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['commondataservice']['connectionId']"
+                                        }
+                                    },
+                                    "method": "get",
+                                    "path": "/api/data/v9.1/@{encodeURIComponent(encodeURIComponent('incidents'))}",
+                                    "queries": {
+                                        "fetchXml": "\n<fetch mapping=\"logical\" >\n    <entity name=\"incident\" >\n        <attribute name=\"incidentid\" />\n        <filter type=\"and\" >\n            <condition attribute=\"crimson_customerreference\" operator=\"eq\" value=\"@{body('Parse_Payload')?['ExternalCaseRef']}\" />\n        </filter>\n        <link-entity name=\"crimson_supportedapplication\" to=\"crimson_supportedapplicationid\" from=\"crimson_supportedapplicationid\" >\n            <filter type=\"and\" >\n                <condition attribute=\"crimson_supportedapplicationid\" operator=\"eq\" value=\"@{body('Get_Supported_Application_By_Id')?['crimson_supportedapplicationid']}\" />\n            </filter>\n        </link-entity>\n    </entity>\n</fetch>"
+                                    }
+                                },
+                                "runAfter": {
+                                    "Get_Supported_Application_By_Id": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ApiConnection"
+                            },
+                            "Get_Case_By_Id": {
+                                "inputs": {
+                                    "headers": {
+                                        "accept": "application/json;odata.metadata=full",
+                                        "organization": "https://crimsonportal.crm4.dynamics.com",
+                                        "prefer": "odata.include-annotations=*"
+                                    },
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['commondataservice']['connectionId']"
+                                        }
+                                    },
+                                    "method": "get",
+                                    "path": "/api/data/v9.1/@{encodeURIComponent(encodeURIComponent('incidents'))}(@{encodeURIComponent(encodeURIComponent(variables('CaseId')))})"
+                                },
+                                "runAfter": {
+                                    "Check_If_New_Case": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ApiConnection"
+                            },
+                            "Get_Contact_By_Id": {
+                                "inputs": {
+                                    "headers": {
+                                        "accept": "application/json;odata.metadata=full",
+                                        "organization": "https://crimsonportal.crm4.dynamics.com",
+                                        "prefer": "odata.include-annotations=*"
+                                    },
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['commondataservice']['connectionId']"
+                                        }
+                                    },
+                                    "method": "get",
+                                    "path": "/api/data/v9.1/@{encodeURIComponent(encodeURIComponent('contacts'))}(@{encodeURIComponent(encodeURIComponent(first(body('Get_Contact_By_Email')?['value'])?['contactid']))})"
+                                },
+                                "runAfter": {},
+                                "type": "ApiConnection"
+                            },
+                            "Get_Supported_Application": {
+                                "inputs": {
+                                    "headers": {
+                                        "accept": "application/json;odata.metadata=full",
+                                        "organization": "https://crimsonportal.crm4.dynamics.com",
+                                        "prefer": "odata.include-annotations=*"
+                                    },
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['commondataservice']['connectionId']"
+                                        }
+                                    },
+                                    "method": "get",
+                                    "path": "/api/data/v9.1/@{encodeURIComponent(encodeURIComponent('crimson_supportedapplications'))}",
+                                    "queries": {
+                                        "$expand": "crimson_customer($select=accountid)",
+                                        "$filter": "crimson_customer/accountid eq @{body('Get_Account_By_Id')?['accountid']}"
+                                    }
+                                },
+                                "runAfter": {
+                                    "Get_Account_By_Id": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ApiConnection"
+                            },
+                            "Get_Supported_Application_By_Id": {
+                                "inputs": {
+                                    "headers": {
+                                        "accept": "application/json;odata.metadata=full",
+                                        "organization": "https://crimsonportal.crm4.dynamics.com",
+                                        "prefer": "odata.include-annotations=*"
+                                    },
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['commondataservice']['connectionId']"
+                                        }
+                                    },
+                                    "method": "get",
+                                    "path": "/api/data/v9.1/@{encodeURIComponent(encodeURIComponent('crimson_supportedapplications'))}(@{encodeURIComponent(encodeURIComponent(first(body('Get_Supported_Application')?['value'])?['crimson_supportedapplicationid']))})"
+                                },
+                                "runAfter": {
+                                    "Get_Supported_Application": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "type": "ApiConnection"
+                            }
+                        },
+                        "else": {
+                            "actions": {
+                                "Compose_No_Contact_Exists": {
+                                    "inputs": {
+                                        "Error": "No Contact Exists for : @{body('Parse_Payload')?['ContactEmail']}"
+                                    },
+                                    "runAfter": {},
+                                    "type": "Compose"
+                                },
+                                "Email_Validation_Error_-_Invalid_Customer": {
+                                    "inputs": {
+                                        "body": {
+                                            "Body": "<p>@{outputs('Compose_No_Contact_Exists')}</p>",
+                                            "Importance": "Normal",
+                                            "Subject": "Crimsonportal Integration Validation Error ",
+                                            "To": "@parameters('EmailAddress')"
+                                        },
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['office365_1']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "path": "/v2/Mail"
+                                    },
+                                    "runAfter": {
+                                        "Response_Invalid_Customer": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection"
+                                },
+                                "Response_Invalid_Customer": {
+                                    "inputs": {
+                                        "body": "@json(string(outputs('Compose_No_Contact_Exists')))",
+                                        "statusCode": 200
+                                    },
+                                    "kind": "Http",
+                                    "runAfter": {
+                                        "Compose_No_Contact_Exists": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Response"
+                                },
+                                "Terminate_No_Contact_Exists": {
+                                    "inputs": {
+                                        "runError": {
+                                            "code": "401",
+                                            "message": "@{json(string(outputs('Compose_No_Contact_Exists')))}"
+                                        },
+                                        "runStatus": "Failed"
+                                    },
+                                    "runAfter": {
+                                        "Email_Validation_Error_-_Invalid_Customer": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Terminate"
+                                }
+                            }
+                        },
+                        "expression": {
+                            "and": [
+                                {
+                                    "greater": [
+                                        "@length(body('Get_Contact_By_Email')?['value'])",
+                                        0
+                                    ]
+                                }
+                            ]
+                        },
+                        "runAfter": {
+                            "Get_Contact_By_Email": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "If"
+                    },
+                    "Compose_Response": {
+                        "inputs": {
+                            "Crimson_Ref": "@body('Get_Case_By_Id')?['crimson_incidentnumber']",
+                            "Freshservice_Ref": "@body('Parse_Payload')?['ExternalCaseRef']",
+                            "Status": "Case created"
+                        },
+                        "runAfter": {
+                            "Check_If_Contact_Exists": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Compose"
+                    },
+                    "Get_ApiKey_Secret": {
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['keyvault']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/secrets/@{encodeURIComponent('ApiKey')}/value"
+                        },
+                        "runAfter": {},
+                        "type": "ApiConnection"
+                    },
+                    "Get_Contact_By_Email": {
+                        "inputs": {
+                            "headers": {
+                                "accept": "application/json;odata.metadata=full",
+                                "organization": "https://crimsonportal.crm4.dynamics.com",
+                                "prefer": "odata.include-annotations=*"
+                            },
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['commondataservice']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/api/data/v9.1/@{encodeURIComponent(encodeURIComponent('contacts'))}",
+                            "queries": {
+                                "$filter": "emailaddress1 eq '@{body('Parse_Payload')?['ContactEmail']}'"
+                            }
+                        },
+                        "runAfter": {
+                            "Parse_Payload": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ApiConnection"
+                    },
+                    "Parse_Payload": {
+                        "inputs": {
+                            "content": "@json(variables('Payload'))",
+                            "schema": {
+                                "properties": {
+                                    "Attachments": {
+                                        "items": {
+                                            "properties": {
+                                                "Content": {
+                                                    "type": "string"
+                                                },
+                                                "ContentType": {
+                                                    "type": "string"
+                                                },
+                                                "CreatedAt": {
+                                                    "type": "string"
+                                                },
+                                                "Name": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "Content",
+                                                "ContentType",
+                                                "CreatedAt",
+                                                "Name"
+                                            ],
+                                            "type": "object"
+                                        },
+                                        "type": "array"
+                                    },
+                                    "ContactEmail": {
+                                        "type": "string"
+                                    },
+                                    "Description": {
+                                        "type": "string"
+                                    },
+                                    "ExternalCaseRef": {
+                                        "type": "string"
+                                    },
+                                    "Priority": {
+                                        "type": "integer"
+                                    },
+                                    "Title": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        },
+                        "runAfter": {
+                            "Switch_Source": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "ParseJson"
+                    },
+                    "Send_Response": {
+                        "inputs": {
+                            "body": "@json(string(outputs('Compose_Response')))",
+                            "statusCode": 200
+                        },
+                        "kind": "Http",
+                        "runAfter": {
+                            "Compose_Response": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Response"
+                    },
+                    "Switch_Source": {
+                        "cases": {
+                            "Vistry": {
+                                "actions": {
+                                    "Create_Payload": {
+                                        "inputs": {
+                                            "Attachments": "@variables('Attachments')",
+                                            "ContactEmail": "@body('Parse_Agent')?['agent']?['email']",
+                                            "Description": "@body('Parse_Vistry_JSON')?['ticket']?['description_text']",
+                                            "ExternalCaseRef": "@string(body('Parse_Vistry_JSON')?['ticket']?['id'])",
+                                            "Priority": "@int(variables('Priority'))",
+                                            "Title": "@body('Parse_Vistry_JSON')?['ticket']?['subject']"
+                                        },
+                                        "runAfter": {
+                                            "Parse_Agent": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Compose"
+                                    },
+                                    "For_Each_Attachment": {
+                                        "actions": {
+                                            "Append_To_Attachments": {
+                                                "inputs": {
+                                                    "name": "Attachments",
+                                                    "value": "@json(string(outputs('Compose_Attachment')))"
+                                                },
+                                                "runAfter": {
+                                                    "Compose_Attachment": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "AppendToArrayVariable"
+                                            },
+                                            "Compose_Attachment": {
+                                                "inputs": {
+                                                    "Content": "@body('Download_Attachment')?['$content']",
+                                                    "ContentType": "@items('For_Each_Attachment')?['content_type']",
+                                                    "CreatedAt": "@items('For_Each_Attachment')?['created_at']",
+                                                    "Name": "@items('For_Each_Attachment')?['name']"
+                                                },
+                                                "runAfter": {
+                                                    "Download_Attachment": [
+                                                        "Succeeded"
+                                                    ]
+                                                },
+                                                "type": "Compose"
+                                            },
+                                            "Download_Attachment": {
+                                                "inputs": {
+                                                    "method": "GET",
+                                                    "uri": "@{items('For_Each_Attachment')?['attachment_url']}"
+                                                },
+                                                "runAfter": {},
+                                                "type": "Http"
+                                            }
+                                        },
+                                        "foreach": "@body('Parse_Vistry_JSON')?['ticket']?['attachments']",
+                                        "runAfter": {
+                                            "Switch": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Foreach"
+                                    },
+                                    "HTTP_Get_Agent_Details": {
+                                        "inputs": {
+                                            "authentication": {
+                                                "password": "x",
+                                                "type": "Basic",
+                                                "username": "BCFhrTXtyBOA51B1W617"
+                                            },
+                                            "method": "GET",
+                                            "uri": "https://Bovishomes-fs-sandbox.Freshservice.com/api/v2/agents/@{body('Parse_Vistry_JSON')?['ticket']?['responder_id']}"
+                                        },
+                                        "runAfter": {
+                                            "For_Each_Attachment": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Http"
+                                    },
+                                    "Parse_Agent": {
+                                        "inputs": {
+                                            "content": "@body('HTTP_Get_Agent_Details')",
+                                            "schema": {
+                                                "properties": {
+                                                    "agent": {
+                                                        "properties": {
+                                                            "active": {
+                                                                "type": "boolean"
+                                                            },
+                                                            "address": {},
+                                                            "auto_assign_status_changed_at": {},
+                                                            "auto_assign_tickets": {
+                                                                "type": "boolean"
+                                                            },
+                                                            "background_information": {},
+                                                            "can_see_all_tickets_from_associated_departments": {
+                                                                "type": "boolean"
+                                                            },
+                                                            "created_at": {
+                                                                "type": "string"
+                                                            },
+                                                            "custom_fields": {
+                                                                "properties": {
+                                                                    "mobile_phone_rep": {},
+                                                                    "region": {}
+                                                                },
+                                                                "type": "object"
+                                                            },
+                                                            "department_ids": {
+                                                                "type": "array"
+                                                            },
+                                                            "department_names": {},
+                                                            "email": {
+                                                                "type": "string"
+                                                            },
+                                                            "external_id": {},
+                                                            "first_name": {
+                                                                "type": "string"
+                                                            },
+                                                            "group_ids": {
+                                                                "items": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "type": "array"
+                                                            },
+                                                            "has_logged_in": {
+                                                                "type": "boolean"
+                                                            },
+                                                            "id": {
+                                                                "type": "integer"
+                                                            },
+                                                            "job_title": {},
+                                                            "language": {
+                                                                "type": "string"
+                                                            },
+                                                            "last_active_at": {
+                                                                "type": "string"
+                                                            },
+                                                            "last_login_at": {
+                                                                "type": "string"
+                                                            },
+                                                            "last_name": {
+                                                                "type": "string"
+                                                            },
+                                                            "location_id": {},
+                                                            "location_name": {},
+                                                            "member_of": {
+                                                                "items": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "type": "array"
+                                                            },
+                                                            "member_of_pending_approval": {
+                                                                "type": "array"
+                                                            },
+                                                            "mobile_phone_number": {},
+                                                            "observer_of": {
+                                                                "type": "array"
+                                                            },
+                                                            "observer_of_pending_approval": {
+                                                                "type": "array"
+                                                            },
+                                                            "occasional": {
+                                                                "type": "boolean"
+                                                            },
+                                                            "reporting_manager_id": {},
+                                                            "role_ids": {
+                                                                "items": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "type": "array"
+                                                            },
+                                                            "roles": {
+                                                                "items": {
+                                                                    "properties": {
+                                                                        "assignment_scope": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "groups": {
+                                                                            "type": "array"
+                                                                        },
+                                                                        "role_id": {
+                                                                            "type": "integer"
+                                                                        }
+                                                                    },
+                                                                    "required": [
+                                                                        "role_id",
+                                                                        "assignment_scope",
+                                                                        "groups"
+                                                                    ],
+                                                                    "type": "object"
+                                                                },
+                                                                "type": "array"
+                                                            },
+                                                            "scopes": {
+                                                                "properties": {
+                                                                    "asset": {},
+                                                                    "change": {},
+                                                                    "contract": {},
+                                                                    "problem": {},
+                                                                    "release": {},
+                                                                    "solution": {},
+                                                                    "ticket": {}
+                                                                },
+                                                                "type": "object"
+                                                            },
+                                                            "signature": {
+                                                                "type": "string"
+                                                            },
+                                                            "time_format": {
+                                                                "type": "string"
+                                                            },
+                                                            "time_zone": {
+                                                                "type": "string"
+                                                            },
+                                                            "updated_at": {
+                                                                "type": "string"
+                                                            },
+                                                            "vip_user": {
+                                                                "type": "boolean"
+                                                            },
+                                                            "work_phone_number": {},
+                                                            "workspace_ids": {
+                                                                "items": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "type": "array"
+                                                            },
+                                                            "workspace_info": {
+                                                                "items": {
+                                                                    "properties": {
+                                                                        "points": {},
+                                                                        "scoreboard_level_id": {},
+                                                                        "workspace_id": {
+                                                                            "type": "integer"
+                                                                        }
+                                                                    },
+                                                                    "required": [
+                                                                        "workspace_id",
+                                                                        "scoreboard_level_id",
+                                                                        "points"
+                                                                    ],
+                                                                    "type": "object"
+                                                                },
+                                                                "type": "array"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        },
+                                        "runAfter": {
+                                            "HTTP_Get_Agent_Details": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "ParseJson"
+                                    },
+                                    "Parse_Vistry_JSON": {
+                                        "inputs": {
+                                            "content": "@triggerBody()",
+                                            "schema": {
+                                                "properties": {
+                                                    "ticket": {
+                                                        "properties": {
+                                                            "applied_business_hours": {
+                                                                "type": "integer"
+                                                            },
+                                                            "attachments": {
+                                                                "type": "array"
+                                                            },
+                                                            "bcc_emails": {},
+                                                            "category": {
+                                                                "type": "string"
+                                                            },
+                                                            "cc_emails": {
+                                                                "type": "array"
+                                                            },
+                                                            "created_at": {
+                                                                "type": "string"
+                                                            },
+                                                            "created_within_business_hours": {
+                                                                "type": "boolean"
+                                                            },
+                                                            "custom_fields": {
+                                                                "properties": {
+                                                                    "business_impact": {},
+                                                                    "critical_cyber_incident": {},
+                                                                    "devops_ref": {},
+                                                                    "expected_user_name": {},
+                                                                    "external_supplier_reference_eg_maintel_coins": {},
+                                                                    "impacted_locations": {},
+                                                                    "major_incident_type": {},
+                                                                    "no_of_customers_impacted": {},
+                                                                    "reason_for_closing": {},
+                                                                    "scheduled_workflow_complete": {},
+                                                                    "ticket_closed_14_days": {}
+                                                                },
+                                                                "type": "object"
+                                                            },
+                                                            "deleted": {
+                                                                "type": "boolean"
+                                                            },
+                                                            "department_id": {},
+                                                            "description": {
+                                                                "type": "string"
+                                                            },
+                                                            "description_text": {
+                                                                "type": "string"
+                                                            },
+                                                            "due_by": {
+                                                                "type": "string"
+                                                            },
+                                                            "email_config_id": {},
+                                                            "fr_due_by": {
+                                                                "type": "string"
+                                                            },
+                                                            "fr_escalated": {
+                                                                "type": "boolean"
+                                                            },
+                                                            "fwd_emails": {
+                                                                "type": "array"
+                                                            },
+                                                            "group_id": {
+                                                                "type": "integer"
+                                                            },
+                                                            "id": {
+                                                                "type": "integer"
+                                                            },
+                                                            "impact": {
+                                                                "type": "integer"
+                                                            },
+                                                            "is_escalated": {
+                                                                "type": "boolean"
+                                                            },
+                                                            "item_category": {
+                                                                "type": "string"
+                                                            },
+                                                            "priority": {
+                                                                "type": "integer"
+                                                            },
+                                                            "reply_cc_emails": {
+                                                                "type": "array"
+                                                            },
+                                                            "requested_for_id": {
+                                                                "type": "integer"
+                                                            },
+                                                            "requester": {
+                                                                "properties": {
+                                                                    "email": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "id": {
+                                                                        "type": "integer"
+                                                                    },
+                                                                    "mobile": {},
+                                                                    "name": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "phone": {}
+                                                                },
+                                                                "type": "object"
+                                                            },
+                                                            "requester_id": {
+                                                                "type": "integer"
+                                                            },
+                                                            "responder_id": {
+                                                                "type": "integer"
+                                                            },
+                                                            "sla_policy_id": {
+                                                                "type": "integer"
+                                                            },
+                                                            "source": {
+                                                                "type": "integer"
+                                                            },
+                                                            "spam": {
+                                                                "type": "boolean"
+                                                            },
+                                                            "status": {
+                                                                "type": "integer"
+                                                            },
+                                                            "sub_category": {
+                                                                "type": "string"
+                                                            },
+                                                            "subject": {
+                                                                "type": "string"
+                                                            },
+                                                            "to_emails": {},
+                                                            "type": {
+                                                                "type": "string"
+                                                            },
+                                                            "updated_at": {
+                                                                "type": "string"
+                                                            },
+                                                            "urgency": {
+                                                                "type": "integer"
+                                                            },
+                                                            "workspace_id": {
+                                                                "type": "integer"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        },
+                                        "runAfter": {},
+                                        "type": "ParseJson"
+                                    },
+                                    "Set_Vistry_Payload": {
+                                        "inputs": {
+                                            "name": "Payload",
+                                            "value": "@{outputs('Create_Payload')}"
+                                        },
+                                        "runAfter": {
+                                            "Create_Payload": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "SetVariable"
+                                    },
+                                    "Switch": {
+                                        "cases": {
+                                            "Case": {
+                                                "actions": {
+                                                    "Set_variable": {
+                                                        "inputs": {
+                                                            "name": "Priority",
+                                                            "value": 143570002
+                                                        },
+                                                        "runAfter": {},
+                                                        "type": "SetVariable"
+                                                    }
+                                                },
+                                                "case": 1
+                                            },
+                                            "Case_2": {
+                                                "actions": {
+                                                    "Set_variable_2": {
+                                                        "inputs": {
+                                                            "name": "Priority",
+                                                            "value": 143570001
+                                                        },
+                                                        "runAfter": {},
+                                                        "type": "SetVariable"
+                                                    }
+                                                },
+                                                "case": 2
+                                            }
+                                        },
+                                        "default": {
+                                            "actions": {
+                                                "Set_variable_3": {
+                                                    "inputs": {
+                                                        "name": "Priority",
+                                                        "value": 143570002
+                                                    },
+                                                    "runAfter": {},
+                                                    "type": "SetVariable"
+                                                }
+                                            }
+                                        },
+                                        "expression": "@body('Parse_Vistry_JSON')?['ticket']?['priority']",
+                                        "runAfter": {
+                                            "Parse_Vistry_JSON": [
+                                                "Succeeded"
+                                            ]
+                                        },
+                                        "type": "Switch"
+                                    }
+                                },
+                                "case": "Vistry"
+                            }
+                        },
+                        "default": {
+                            "actions": {}
+                        },
+                        "expression": "@triggerOutputs()['headers']?['Source']",
+                        "runAfter": {
+                            "Check_If_ApiKey_is_Valid": [
+                                "Succeeded"
+                            ]
+                        },
+                        "type": "Switch"
+                    }
+                },
+                "runAfter": {
+                    "Initialize_CaseId": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Scope"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "defaultValue": {},
+                "type": "Object"
+            },
+            "EmailAddress": {
+                "defaultValue": "bharathy.mudaliar@crimson.co.uk",
+                "type": "String"
+            }
+        },
+        "triggers": {
+            "manual": {
+                "inputs": {
+                    "schema": {}
+                },
+                "kind": "Http",
+                "type": "Request"
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "value": {
+                "commondataservice": {
+                    "connectionId": "/subscriptions/662d765b-9795-49eb-bf09-f7811ac5b7a9/resourceGroups/rg-vistry-freshservice-integration/providers/Microsoft.Web/connections/commondataservice",
+                    "connectionName": "commondataservice",
+                    "id": "/subscriptions/662d765b-9795-49eb-bf09-f7811ac5b7a9/providers/Microsoft.Web/locations/uksouth/managedApis/commondataservice"
+                },
+                "keyvault": {
+                    "connectionId": "/subscriptions/662d765b-9795-49eb-bf09-f7811ac5b7a9/resourceGroups/rg-vistry-freshservice-integration/providers/Microsoft.Web/connections/keyvault-3",
+                    "connectionName": "keyvault-3",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    },
+                    "id": "/subscriptions/662d765b-9795-49eb-bf09-f7811ac5b7a9/providers/Microsoft.Web/locations/uksouth/managedApis/keyvault"
+                },
+                "office365_1": {
+                    "connectionId": "/subscriptions/662d765b-9795-49eb-bf09-f7811ac5b7a9/resourceGroups/rg-vistry-freshservice-integration/providers/Microsoft.Web/connections/office365-1",
+                    "connectionName": "office365-1",
+                    "id": "/subscriptions/662d765b-9795-49eb-bf09-f7811ac5b7a9/providers/Microsoft.Web/locations/uksouth/managedApis/office365"
+                }
+            }
+        }
+    }

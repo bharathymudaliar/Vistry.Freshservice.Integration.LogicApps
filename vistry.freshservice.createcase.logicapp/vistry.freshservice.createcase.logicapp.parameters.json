@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "logicAppName": {
+      "value": "vistry.freshservice.createcase.logicapp"
+    },
+    "commondataservice_1_privacySetting": {
+      "value": "Public"
+    },
+    "commondataservice_1_environment": {
+      "value": "1"
+    },
+    "keyvault_1_vaultName": {
+      "value": "kv-vistry-fs-integration"
+    },
+    "commondataservice_1_token:clientSecret": {
+      "value": "3CL8Q~G_DK0kY1QvtyczB3HhC4Zch8XvUjc-eaqW"
+    },
+    "commondataservice_1_token:resourceUri": {
+      "value": "/subscriptions/fe9be1ef-2267-4a3c-a19a-efa99507f55f/resourceGroups/crimson-vistry-freshservice-integration/providers/Microsoft.Web/connections/commondataservice"
+    },
+    "integrationAccount_Name": {
+      "value": "integration-account"
+    },
+    "integrationAccount_ResourceGroup": {
+      "value": "rg-vistry-freshservice-integration"
+    },
+    "keyvault_1_Connection_Name": {
+      "value": "keyvault"
+    }
+  }
+}

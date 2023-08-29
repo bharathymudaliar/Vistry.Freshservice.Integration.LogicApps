@@ -1,0 +1,230 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "logicAppName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "metadata": {
+        "description": "Name of the Logic App."
+      }
+    },
+    "logicAppLocation": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "allowedValues": [
+        "[resourceGroup().location]",
+        "australiaeast",
+        "australiasoutheast",
+        "brazilsouth",
+        "brazilsoutheast",
+        "canadacentral",
+        "canadaeast",
+        "centralindia",
+        "centralus",
+        "eastasia",
+        "eastus",
+        "eastus2",
+        "francecentral",
+        "francesouth",
+        "germanynorth",
+        "germanywestcentral",
+        "japaneast",
+        "japanwest",
+        "koreacentral",
+        "koreasouth",
+        "northcentralus",
+        "northeurope",
+        "norwayeast",
+        "norwaywest",
+        "polandcentral",
+        "qatarcentral",
+        "southafricanorth",
+        "southafricawest",
+        "southcentralus",
+        "southeastasia",
+        "southindia",
+        "swedencentral",
+        "switzerlandnorth",
+        "switzerlandwest",
+        "uaecentral",
+        "uaenorth",
+        "uksouth",
+        "ukwest",
+        "westcentralus",
+        "westeurope",
+        "westindia",
+        "westus",
+        "westus2",
+        "westus3"
+      ],
+      "metadata": {
+        "description": "Location of the Logic App."
+      }
+    },
+    "commondataservice_1_Connection_Name": {
+      "type": "string",
+      "defaultValue": "commondataservice"
+    },
+    "commondataservice_1_Connection_DisplayName": {
+      "type": "string",
+      "defaultValue": "dataverseconnection"
+    },
+    "commondataservice_1_environment": {
+      "type": "string",
+      "metadata": {
+        "description": "Environment id"
+      }
+    },
+    "commondataservice_1_token:clientId": {
+      "type": "string",
+      "metadata": {
+        "description": "Client (or Application) ID of the Azure Active Directory application."
+      },
+      "defaultValue": "66e334b9-36dc-4f5d-bc52-0a11cca0f3aa"
+    },
+    "commondataservice_1_token:clientSecret": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Client secret of the Azure Active Directory application."
+      }
+    },
+    "commondataservice_1_token:TenantId": {
+      "type": "string",
+      "metadata": {
+        "description": "The tenant ID for the Azure Active Directory application."
+      },
+      "defaultValue": "beeaceee-85bb-4c03-bb33-1c8088a76a79"
+    },
+    "commondataservice_1_token:resourceUri": {
+      "type": "string",
+      "metadata": {
+        "description": "The resource you are requesting authorization to use."
+      }
+    },
+    "commondataservice_1_token:grantType": {
+      "type": "string",
+      "metadata": {
+        "description": "Grant type"
+      },
+      "defaultValue": "client_credentials",
+      "allowedValues": [
+        "code",
+        "client_credentials"
+      ]
+    },
+    "commondataservice_1_privacySetting": {
+      "type": "string",
+      "metadata": {
+        "description": "Privacy Setting"
+      },
+      "allowedValues": [
+        "None",
+        "Private",
+        "Organizational",
+        "Public"
+      ]
+    }
+  },
+  "variables": {},
+  "resources": [
+    {
+      "name": "[parameters('logicAppName')]",
+      "type": "Microsoft.Logic/workflows",
+      "location": "[parameters('logicAppLocation')]",
+      "tags": {
+        "displayName": "LogicApp"
+      },
+      "apiVersion": "2016-06-01",
+      "properties": {
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "actions": {
+            "Get_a_row_by_ID_(preview)": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['commondataservice']['connectionId']"
+                  }
+                },
+                "method": "get",
+                "headers": {
+                  "prefer": "odata.include-annotations=*",
+                  "accept": "application/json;odata.metadata=full",
+                  "organization": "https://crimsonportal.crm4.dynamics.com"
+                },
+                "path": "/api/data/v9.1/@{encodeURIComponent(encodeURIComponent('incidents'))}(@{encodeURIComponent(encodeURIComponent(triggerBody()?['_crimson_case_value']))})"
+              },
+              "runAfter": {}
+            }
+          },
+          "parameters": {
+            "$connections": {
+              "defaultValue": {},
+              "type": "Object"
+            }
+          },
+          "triggers": {
+            "When_a_new_row_is_added_to_the_Trigger_table": {
+              "type": "ApiConnectionWebhook",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['commondataservice']['connectionId']"
+                  }
+                },
+                "body": {
+                  "NotificationUrl": "@{listCallbackUrl()}"
+                },
+                "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://crimsonportal.crm4.dynamics.com'))}/tables/@{encodeURIComponent(encodeURIComponent('crimson_triggers'))}/onnewitemswebhook",
+                "queries": {
+                  "scope": "Organization"
+                }
+              }
+            }
+          },
+          "contentVersion": "1.0.0.0",
+          "outputs": {}
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "commondataservice": {
+                "id": "[concat(subscription().id, '/providers/Microsoft.Web/locations/', parameters('logicAppLocation'), '/managedApis/', 'commondataservice')]",
+                "connectionId": "[resourceId('Microsoft.Web/connections', parameters('commondataservice_1_Connection_Name'))]",
+                "connectionName": "[parameters('commondataservice_1_Connection_Name')]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/connections', parameters('commondataservice_1_Connection_Name'))]"
+      ]
+    },
+    {
+      "type": "MICROSOFT.WEB/CONNECTIONS",
+      "apiVersion": "2018-07-01-preview",
+      "name": "[parameters('commondataservice_1_Connection_Name')]",
+      "location": "[parameters('logicAppLocation')]",
+      "properties": {
+        "api": {
+          "id": "[concat(subscription().id, '/providers/Microsoft.Web/locations/', parameters('logicAppLocation'), '/managedApis/', 'commondataservice')]"
+        },
+        "displayName": "[parameters('commondataservice_1_Connection_DisplayName')]",
+        "parameterValues": {
+          "environment": "[parameters('commondataservice_1_environment')]",
+          "token:clientId": "[parameters('commondataservice_1_token:clientId')]",
+          "token:clientSecret": "[parameters('commondataservice_1_token:clientSecret')]",
+          "token:TenantId": "[parameters('commondataservice_1_token:TenantId')]",
+          "token:resourceUri": "[parameters('commondataservice_1_token:resourceUri')]",
+          "token:grantType": "[parameters('commondataservice_1_token:grantType')]",
+          "privacySetting": "[parameters('commondataservice_1_privacySetting')]"
+        }
+      }
+    }
+  ],
+  "outputs": {}
+}
